@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+
+
+
+  
+
+
+<html class="theme-next gemini use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+<meta name="theme-color" content="#222">
+
+
+
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.2" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="Hexo, NexT" />
+
+
+
+
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.2" />
+
+
+
+
+
+
+<meta name="description" content="如果还没有看过 CockroachDB 逻辑执行计划， 请先看那篇文章。 本文翻译自：CockroachDB 物理执行计划的分析 概述 本篇文章主要是讲一个分布式SQL语句的执行过程。总的目标就是处理或者移动的计算要靠近数据源。 概念  KV - 逻辑存储层的操作，对应 range 和 batch API k/v - 一个键值对，通常是对应 KV 中的 entry。 Node - 集群中的一个机器">
+<meta property="og:type" content="article">
+<meta property="og:title" content="CockroachDB 物理执行计划简单分析">
+<meta property="og:url" content="https://adamyaoqinglin.github.io/2017/12/14/CockroachDB_Physical_Plan/index.html">
+<meta property="og:site_name" content="橡树">
+<meta property="og:description" content="如果还没有看过 CockroachDB 逻辑执行计划， 请先看那篇文章。 本文翻译自：CockroachDB 物理执行计划的分析 概述 本篇文章主要是讲一个分布式SQL语句的执行过程。总的目标就是处理或者移动的计算要靠近数据源。 概念  KV - 逻辑存储层的操作，对应 range 和 batch API k/v - 一个键值对，通常是对应 KV 中的 entry。 Node - 集群中的一个机器">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:image" content="https://adamyaoqinglin.github.io/uploads/distributed_sql_logical_plan.png">
+<meta property="og:image" content="https://adamyaoqinglin.github.io/uploads/distributed_sql_physical_plan.png">
+<meta property="og:image" content="https://adamyaoqinglin.github.io/uploads/distributed_sql_physical_plan_2.png">
+<meta property="og:image" content="https://adamyaoqinglin.github.io/uploads/distributed_sql_processor.png">
+<meta property="og:image" content="https://adamyaoqinglin.github.io/uploads/distributed_sql_join_logical.png">
+<meta property="og:image" content="https://adamyaoqinglin.github.io/uploads/distributed_sql_join_physical.png">
+<meta property="og:image" content="https://adamyaoqinglin.github.io/uploads/distributed_sql_join_physical2.png">
+<meta property="og:image" content="https://adamyaoqinglin.github.io/uploads/distributed_sql_daily_promotion_physical_plan.png">
+<meta property="og:updated_time" content="2017-12-14T09:22:32.485Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="CockroachDB 物理执行计划简单分析">
+<meta name="twitter:description" content="如果还没有看过 CockroachDB 逻辑执行计划， 请先看那篇文章。 本文翻译自：CockroachDB 物理执行计划的分析 概述 本篇文章主要是讲一个分布式SQL语句的执行过程。总的目标就是处理或者移动的计算要靠近数据源。 概念  KV - 逻辑存储层的操作，对应 range 和 batch API k/v - 一个键值对，通常是对应 KV 中的 entry。 Node - 集群中的一个机器">
+<meta name="twitter:image" content="https://adamyaoqinglin.github.io/uploads/distributed_sql_logical_plan.png">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Gemini',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":12,"b2t":false,"scrollpercent":false,"onmobile":false},
+    fancybox: true,
+    tabs: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="https://adamyaoqinglin.github.io/2017/12/14/CockroachDB_Physical_Plan/"/>
+
+
+
+
+
+  <title>CockroachDB 物理执行计划简单分析 | 橡树</title>
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">橡树</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-categories">
+          <a href="/categories/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-th"></i> <br />
+            
+            分类
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+    </ul>
+  
+
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal" itemscope itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="https://adamyaoqinglin.github.io/2017/12/14/CockroachDB_Physical_Plan/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Adam Yao">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/uploads/avatar.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="橡树">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">CockroachDB 物理执行计划简单分析</h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2017-12-14T17:09:35+08:00">
+                2017-12-14
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+            <span class="post-category" >
+            
+              <span class="post-meta-divider">|</span>
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-folder-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">分类于</span>
+              
+              
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/CockroachDB/" itemprop="url" rel="index">
+                    <span itemprop="name">CockroachDB</span>
+                  </a>
+                </span>
+
+                
+                
+              
+            </span>
+          
+
+          
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>如果还没有看过 <a href="http://blog.csdn.net/yaoqinglin/article/details/78722022" target="_blank" rel="noopener">CockroachDB 逻辑执行计划</a>， 请先看那篇文章。</p>
+<p>本文翻译自：<br><a href="https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20160421_distributed_sql.md" target="_blank" rel="noopener">CockroachDB 物理执行计划的分析</a></p>
+<h2 id="概述"><a href="#概述" class="headerlink" title="概述"></a><strong>概述</strong></h2><hr>
+<p>本篇文章主要是讲一个分布式SQL语句的执行过程。总的目标就是处理或者移动的计算要靠近数据源。</p>
+<h3 id="概念"><a href="#概念" class="headerlink" title="概念"></a><strong>概念</strong></h3><hr>
+<ul>
+<li>KV - 逻辑存储层的操作，对应 <code>range</code> 和 <code>batch</code> API</li>
+<li>k/v - 一个键值对，通常是对应 <code>KV</code> 中的 <code>entry</code>。</li>
+<li>Node - 集群中的一个机器</li>
+<li>Client / Client-side - <code>SQL</code> 客户端</li>
+<li>Gateway node / Gateway-side - 接收到 <code>SQL</code> 语句的集群中的节点</li>
+<li>Leader node / Leader-side  -  执行 <code>KV</code> 操作并且在本地获取数据的集群节点</li>
+</ul>
+<h2 id="动机-需求分析"><a href="#动机-需求分析" class="headerlink" title="动机(需求分析)"></a><strong>动机(需求分析)</strong></h2><hr>
+<p>物理执行计划的实现如下分析。</p>
+<p>1.Remote-side filtering</p>
+<p>能够将过滤语句尽可能的下推，在每个 <code>node</code> 中获取数据的时候都能尽可能用刀过滤语句。</p>
+<p>2.Remote-side updates and deletes</p>
+<p>对于 <code>UPDATE .. WHERE</code> 和 <code>DELETE .. WHERE</code>，可以尽量避免太多的数据来回传递。可以在过滤的同时判断是不是直接可以更新，若是在同一个节点可以操作，就可以避免数据的来回传递。</p>
+<p>3.Distributed SQL operations</p>
+<p>利用上分布式的多个机器的优势，让 <code>SQL</code> 运算在多个机器上执行。<code>分布式SQL</code> 包含如下三种情况(这三种情况可能出现在同一个语句中)。</p>
+<ol>
+<li>分布式的<code>join</code></li>
+<li>分布式的<code>aggregation</code></li>
+<li>分布式的<code>sorting</code></li>
+</ol>
+<h2 id="设计"><a href="#设计" class="headerlink" title="设计"></a><strong>设计</strong></h2><hr>
+<h3 id="概述-1"><a href="#概述-1" class="headerlink" title="概述"></a><strong>概述</strong></h3><hr>
+<p>对于理解本文比较有帮助的文章是<a href="https://research.google.com/archive/sawzall.html" target="_blank" rel="noopener">Sawzall</a>，这是Google提供的一个高级语言，目标是能够简化利用MapReduce的过程。简而言之就是：<br><code>Sawzall = MapReduce + high-level syntax + new terminology</code></p>
+<p>CockroachDB的物理执行计划与上面文章有类似之处，但是最终的模型与 <code>MapReduce</code> 还是有些区别，下面我们详细的解释一下：</p>
+<ol>
+<li>物理执行计划中包含许多提前定义好的 <code>aggregator</code>s，这些 <code>aggregator</code>s 是为执行SQL的处理部分。多数的 <code>aggregator</code>s 是<code>可以配置的</code>，但是<code>不可编程</code>。<code>可以配置</code>的意思是，能够给定义好的参数赋值。<code>不可编程</code> 的意思是不可以给一些运算，比如 <code>a + b</code>。</li>
+<li>一个特别的 <code>aggregator</code> 是 evaluator，他可以用简单的编程语句。但是这个 <code>aggregator</code> 只能一行一行处理。</li>
+<li>通过 <code>routing</code>，将信息在 <code>aggregator</code> 和 <code>aggregator</code> 之间进行传递。</li>
+<li>逻辑执行计划是不考虑数据存放位置的，但是它存有足够的信息来说明数据存放位置，进而可以分布式计算执行。</li>
+</ol>
+<p>除了累加和分组数据等操作，<code>aggregator</code> 的功能还可以是将数据传递给其它 <code>node</code> ，也可能是作为其他程序的输入。最终，有批量处理结果的特殊功能并且提供 <code>KV</code> 命令的<code>aggregator</code>s ，是用来读取数据或者写入数据的。</p>
+<p>核心思想就是我们转化一个 <code>SQL</code> 到 <code>逻辑模型</code>，再从<code>逻辑模型</code> 转换到 <code>分布式物理执行计划</code>。</p>
+<h3 id="逻辑模型"><a href="#逻辑模型" class="headerlink" title="逻辑模型"></a><strong>逻辑模型</strong></h3><hr>
+<p>我们会将 <code>SQL</code> 语句解析成一个 <code>逻辑模型</code>（这个与之前的<code>逻辑执行计划</code>有些相似）。这个逻辑模型代表着抽象数据流的不同的计算阶段。这个逻辑模型并不知道数据最终的存放方式，但是它存有足够查询到的信息。在后续阶段，我们会将这个<code>逻辑模型</code>转换为<code>物理执行计划</code>。物理执行计划会将抽象计算对应成各个 <code>processor</code>s，同时会定义好 <code>processor</code> 之间的混合的数据流和他们之间的交互通道。</p>
+<p>逻辑模型由各种 <code>aggregators</code> 组成，每一个 <code>aggregator</code> 包含一个 <code>input stream</code> 和一个 <code>output stream</code>。一个 <code>stream</code> 就代表一个 <code>rows</code> 的流。一个 <code>row</code> 代表一个 <code>列元组</code> 的值。每一个 <code>input stream</code> 和 <code>output stream</code> 都包含一个 <code>schema</code>。这个<code>schema</code> 就是 <code>列元组</code> 中列的属性。再次强调，这个 <code>streams (input/output)</code> 是一个逻辑上的概念，并不一定会真实出现在一个真正的物理计算中。（本段实际上就是一个输入的<code>结果集</code>，经过处理后，变成一个输出的结果集。整体叫做 <code>aggregator</code> , 输入输出流的元数据信息就叫 <code>schema</code>）</p>
+<p>在一个 <code>aggregator</code> 内引入一个概念叫 <code>grouping</code>，<code>grouping</code>的作用是概括一个特定的计算。实际上就是给 <code>aggregator</code> 内部能够并发的操作起了一个名字。一个 <code>aggregator</code> 内部的所有 <code>grouping</code> 就被叫做 <code>groups</code> 。<code>groups</code> 是基于一个 <code>group key</code> 存在的。这个 <code>group key</code> 就是上文中<code>schema</code>内的<code>column</code>信息的一个子集。每个 <code>group</code> 都独立执行，并且最终 <code>aggregator</code> 也不会将信息整合，而是直接传递给下一层的<code>aggregator</code>。有些<code>aggregator</code>会保证有序，有些不会。<code>aggregator</code>保证有序，就意味着 <code>group</code> 保证有序。</p>
+<p><code>aggregator</code> 中还可以包含<code>filter</code>，在输出之前会判断这个 <code>filter</code>，决定某列是否可以输出。</p>
+<p>比较特别的 <code>table reader aggregator</code> 没有输入，是被用作数据源的。一个 <code>table reader</code> 可以只输出特定的需要的列。另一个比较特别的 final aggregator 是没有输出流，被用作一条语句的结果集。</p>
+<p>有一些 <code>aggregator</code> 是有输入有序的需求的，同时一些 <code>aggregator</code> 是有一个特定的顺序的保证的。每一个 <code>aggregator</code> 都是有一个被叫做 <code>ordering characterization</code> 函数的，它可以根据输入的排序方式组建输出的排序方式。如果需要排序的 <code>aggregator</code> 遇到了没有排序的 <code>input stream</code> ，那么就需要添加一个 <code>sorting aggregator</code>。</p>
+<p>下面举例子，介绍 <code>aggregator</code>。</p>
+<h3 id="Example-1"><a href="#Example-1" class="headerlink" title="Example 1"></a><strong>Example 1</strong></h3><figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">TABLE Orders (OId INT PRIMARY KEY, CId INT, Value DECIMAL, Date DATE)</span><br><span class="line"></span><br><span class="line"><span class="keyword">SELECT</span> CID, <span class="keyword">SUM</span>(<span class="keyword">VALUE</span>) <span class="keyword">FROM</span> Orders</span><br><span class="line">  <span class="keyword">WHERE</span> <span class="built_in">DATE</span> &gt; <span class="number">2015</span></span><br><span class="line">  <span class="keyword">GROUP</span> <span class="keyword">BY</span> CID</span><br><span class="line">  <span class="keyword">ORDER</span> <span class="keyword">BY</span> <span class="number">1</span> - <span class="keyword">SUM</span>(<span class="keyword">Value</span>)</span><br></pre></td></tr></table></figure>
+<p>这一段所输出的逻辑上的 aggregator  和 stream 如下：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line">TABLE-READER src</span><br><span class="line">  Table: Orders</span><br><span class="line">  Table schema: Oid:INT, Cid:INT, Value:DECIMAL, Date:DATE</span><br><span class="line">  Output filter: (Date &gt; 2015)</span><br><span class="line">  Output schema: Cid:INT, Value:DECIMAL</span><br><span class="line">  Ordering guarantee: Oid</span><br><span class="line"></span><br><span class="line">AGGREGATOR summer</span><br><span class="line">  Input schema: Cid:INT, Value:DECIMAL</span><br><span class="line">  Output schema: Cid:INT, ValueSum:DECIMAL</span><br><span class="line">  Group Key: Cid</span><br><span class="line">  Ordering characterization: if input ordered by Cid, output ordered by Cid</span><br><span class="line"></span><br><span class="line">EVALUATOR sortval</span><br><span class="line">  Input schema: Cid:INT, ValueSum:DECIMAL</span><br><span class="line">  Output schema: SortVal:DECIMAL, Cid:INT, ValueSum:DECIMAL</span><br><span class="line">  Ordering characterization:</span><br><span class="line">    ValueSum -&gt; ValueSum and -SortVal</span><br><span class="line">    Cid,ValueSum -&gt; Cid,ValueSum and Cid,-SortVal</span><br><span class="line">    ValueSum,Cid -&gt; ValueSum,Cid and -SortVal,Cid</span><br><span class="line">  SQL Expressions: E(x:INT) INT = (1 - x)</span><br><span class="line">  Code &#123;</span><br><span class="line">    EMIT E(ValueSum), CId, ValueSum</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">AGGREGATOR final:</span><br><span class="line">  Input schema: SortVal:DECIMAL, Cid:INT, ValueSum:DECIMAL</span><br><span class="line">  Input ordering requirement: SortVal</span><br><span class="line">  Group Key: []</span><br><span class="line"></span><br><span class="line">Composition: src -&gt; summer -&gt; sortval -&gt; final</span><br></pre></td></tr></table></figure>
+<p>上面的初步的逻辑模型没有包含排序，包含了排序就是最后的逻辑模型了。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">src -&gt; summer -&gt; sortval -&gt; sort(OrderSum) -&gt; final</span><br></pre></td></tr></table></figure>
+<p>每一个箭头都是一个逻辑上的数据流(stream)，这就是整体的逻辑模型。<br>在上面的例子中，添加排序的位置只能是在 <code>sortval</code> 之后，<code>final</code> 之前。下面的例子我们来看另一种情况。</p>
+<h3 id="Example-2"><a href="#Example-2" class="headerlink" title="Example 2"></a><strong>Example 2</strong></h3><figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">TABLE People (Age INT, NetWorth DECIMAL, ...)</span><br><span class="line"><span class="keyword">SELECT</span> Age, <span class="keyword">Sum</span>(NetWorth) <span class="keyword">FROM</span> v <span class="keyword">GROUP</span> <span class="keyword">BY</span> AGE <span class="keyword">ORDER</span> <span class="keyword">BY</span> AGE</span><br></pre></td></tr></table></figure>
+<p>初步的逻辑模型如下所示：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">TABLE-READER src</span><br><span class="line">  Table: People</span><br><span class="line">  Table schema: Age:INT, NetWorth:DECIMAL</span><br><span class="line">  Output schema: Age:INT, NetWorth:DECIMAL</span><br><span class="line">  Ordering guarantee: XXX  // will consider different cases later</span><br><span class="line"></span><br><span class="line">AGGREGATOR summer</span><br><span class="line">  Input schema: Age:INT, NetWorth:DECIMAL</span><br><span class="line">  Output schema: Age:INT, NetWorthSum:DECIMAL</span><br><span class="line">  Group Key: Age</span><br><span class="line">  Ordering characterization: if input ordered by Age, output ordered by Age</span><br><span class="line"></span><br><span class="line">AGGREGATOR final:</span><br><span class="line">  Input schema: Age:INT, NetWorthSum:DECIMAL</span><br><span class="line">  Input ordering requirement: Age</span><br><span class="line">  Group Key: []</span><br><span class="line"></span><br><span class="line">Composition: src -&gt; summer -&gt; final</span><br></pre></td></tr></table></figure>
+<p>这个 <code>summer aggregator</code> 可以有两种方式处理，如果输入的时候已经按照 <code>Age</code> 进行排序，那么输出的时候也就是排序完成的结果了。如果输入的时候没有按照 <code>Age</code> 进行排序，那么输出后就是无须的状态。</p>
+<ol>
+<li><code>src</code> 就是有序的，按照 <code>Age</code> 进行排序，那么就不需要添加 <code>sort aggregator</code>。</li>
+<li><code>src</code> 是没有排序的，那么就需要添加一个 <code>sort aggregator</code> 对这个结果集进行排序。但是，这里可以有两种选择形式，如下：</li>
+</ol>
+<p>在final之前， 进行添加排序能够完成需求。<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">src -&gt; summer -&gt; sort(Age) -&gt; final</span><br></pre></td></tr></table></figure></p>
+<p>但是我们发现，在 summer 之前添加这个排序同样可以达到效果。<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">src -&gt; sort(Age) -&gt; summer -&gt; final</span><br></pre></td></tr></table></figure></p>
+<p>这两种情况，就是需要我们去选择，在那种情况排序会性能更好。</p>
+<p>上面我们可以看到，如果前一个 aggregator 有顺序保证，那么后面的aggregator 则尽可能的会保证这个顺序。这样能够使得尽量减少排序的发生。但是，保持排序状态很可能会产生额外的开销，所以我们需要在生成整个<code>原始逻辑模型</code>以后，查看是否真正的需要保持有序，如果不需要，则将顺序删除掉，避免出现过多的性能损失。总结上面所说的，共需要三个步骤。</p>
+<ol>
+<li>原始逻辑模型尽量保持已经存在的顺序。</li>
+<li>查看整体的逻辑模型，将需要添加sort aggregator的地方添加。</li>
+<li>如果哪里不需要保持顺序，则删除这个顺序保证。</li>
+</ol>
+<h3 id="Example-3"><a href="#Example-3" class="headerlink" title="Example 3"></a><strong>Example 3</strong></h3><figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">TABLE v (Name STRING, Age INT, Account INT)</span><br><span class="line"></span><br><span class="line"><span class="keyword">SELECT</span> <span class="keyword">COUNT</span>(<span class="keyword">DISTINCT</span>(<span class="keyword">account</span>)) <span class="keyword">FROM</span> v</span><br><span class="line">  <span class="keyword">WHERE</span> age &gt; <span class="number">10</span> <span class="keyword">and</span> age &lt; <span class="number">30</span></span><br><span class="line">  <span class="keyword">GROUP</span> <span class="keyword">BY</span> age <span class="keyword">HAVING</span> <span class="keyword">MIN</span>(<span class="keyword">Name</span>) &gt; <span class="string">'k'</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line">TABLE-READER src</span><br><span class="line">  Table: v</span><br><span class="line">  Table schema: Name:STRING, Age:INT, Account:INT</span><br><span class="line">  Filter: (Age &gt; 10 AND Age &lt; 30)</span><br><span class="line">  Output schema: Name:STRING, Age:INT, Account:INT</span><br><span class="line">  Ordering guarantee: Name</span><br><span class="line"></span><br><span class="line">AGGREGATOR countdistinctmin</span><br><span class="line">  Input schema: Name:String, Age:INT, Account:INT</span><br><span class="line">  Group Key: Age</span><br><span class="line">  Group results: distinct count as AcctCount:INT</span><br><span class="line">                 MIN(Name) as MinName:STRING</span><br><span class="line">  Output filter: (MinName &gt; &apos;k&apos;)</span><br><span class="line">  Output schema: AcctCount:INT</span><br><span class="line">  Ordering characterization: if input ordered by Age, output ordered by Age</span><br><span class="line"></span><br><span class="line">AGGREGATOR final:</span><br><span class="line">  Input schema: AcctCount:INT</span><br><span class="line">  Input ordering requirement: none</span><br><span class="line">  Group Key: []</span><br><span class="line"></span><br><span class="line">Composition: src -&gt; countdistinctmin -&gt; final</span><br></pre></td></tr></table></figure>
+<p><code>aggregator</code> 的几种类型</p>
+<ul>
+<li>TABLE READER 特殊的，没有输入流，只有输出流。它的参数是 <code>spans</code> (<code>spans</code> 请参考 逻辑执行计划)。它内部可以有<code>filter</code>。</li>
+<li>EVALUATOR 是一个可以编程的，不做分组的 <code>aggregator</code>。它会在每一行上执行这个程序，通过程序的输出结果选择删掉或者更改某些行内的值。</li>
+<li>JOIN 将两个 <code>stream</code> 流合并，必须包含等值的条件。分组的情况就是两个stream中的配置的等值条件相等被分为一组。</li>
+<li>JOIN READER <code>point lookups</code><br>…..<br>具体请参考代码和原文。</li>
+</ul>
+<h2 id="从逻辑模型到物理模型"><a href="#从逻辑模型到物理模型" class="headerlink" title="从逻辑模型到物理模型"></a><strong>从逻辑模型到物理模型</strong></h2><p>为了能够将计算分布式出去，我们选择了下面的几种方式：</p>
+<ul>
+<li>对于任何的 <code>aggregator</code> ， 内部的<code>groups</code> 都是可以并行的执行的。</li>
+<li>对于排序来说，每一个 input 排好顺序，就代表有序，而不需要统一到一个 <code>input</code> 中。</li>
+<li>没有 <code>group keys</code> 的情况( <code>limit</code>, <code>final</code>)，最终只能在一个单独的<code>node</code>上执行。</li>
+</ul>
+<p>每一个逻辑上的 <code>aggregator</code> 都可以被分布倒不同的分布式实例上去，同时要保证每一个 <code>aggregator</code> 内的 <code>stream</code> 都是相同的顺序保证。</p>
+<p>可以通过如下的规则进行分布：</p>
+<ul>
+<li><code>table readers</code> 会有许多的实例同时获取数据，我们可以通过获取数据需要用到的 <code>ranges</code> 来获知哪个实例(node)是被需要的，在这些实例上创建一个 <code>table reader</code>，同时创建一个输出流将获取到的数据传递给下一层次的 <code>aggregator</code>。</li>
+<li>之后的 <code>aggregator</code> 都可以使用这种分布式的方式，需要提前指定可以用到几个实例，通过对 <code>group key</code> 的 <code>hash</code> 的计算， 将数据分布到这些实例中进行计算。空的 <code>group key</code> 只能在一个实例中进行计算。</li>
+<li><code>sorting</code> 的计算也是可以分布的，不必须在同一个实例中实现排序。</li>
+</ul>
+<p>在次以 Example 1 作为例子，语句的执行在 Gateway 节点上，而数据的分布是在 nodes A 和 B 上。 逻辑上的模型依然如下：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line">TABLE-READER src</span><br><span class="line">  Table: Orders</span><br><span class="line">  Table schema: Oid:INT, Cid:INT, Value:DECIMAL, Date:DATE</span><br><span class="line">  Output filter: (Date &gt; 2015)</span><br><span class="line">  Output schema: Cid:INT, Value:DECIMAL</span><br><span class="line">  Ordering guarantee: Oid</span><br><span class="line"></span><br><span class="line">AGGREGATOR summer</span><br><span class="line">  Input schema: Cid:INT, Value:DECIMAL</span><br><span class="line">  Output schema: Cid:INT, ValueSum:DECIMAL</span><br><span class="line">  Group Key: Cid</span><br><span class="line">  Ordering characterization: if input ordered by Cid, output ordered by Cid</span><br><span class="line"></span><br><span class="line">EVALUATOR sortval</span><br><span class="line">  Input schema: Cid:INT, ValueSum:DECIMAL</span><br><span class="line">  Output schema: SortVal:DECIMAL, Cid:INT, ValueSum:DECIMAL</span><br><span class="line">  Ordering characterization: if input ordered by [Cid,]ValueSum[,Cid], output ordered by [Cid,]-ValueSum[,Cid]</span><br><span class="line">  SQL Expressions: E(x:INT) INT = (1 - x)</span><br><span class="line">  Code &#123;</span><br><span class="line">    EMIT E(ValueSum), CId, ValueSum</span><br><span class="line">  &#125;</span><br></pre></td></tr></table></figure>
+<p><img src="/uploads/distributed_sql_logical_plan.png" alt="logical plan"></p>
+<p>根据上面说到的，逻辑模型可以被转化为物理模型如下：</p>
+<p><img src="/uploads/distributed_sql_physical_plan.png" alt="physical plan"></p>
+<p>每一个方块可以叫做一个 <code>processor</code>，解释如下：</p>
+<ul>
+<li><code>src</code> 从表中读取数据，通过 <code>KV</code> <code>Get</code> 操作。同时，<code>filter</code> 会将 <code>Date &gt; 2015</code> 的语句筛选出来，最终传递下一个 <code>aggregator</code>。</li>
+<li><code>summer-stage1</code> 是将本地的数据先进行一次 <code>aggregate</code> 的操作，然后将数据传递给后面的下一步骤。通过对 <code>group key</code> 的 <code>hash</code> 之后，在进行后面的继续<code>aggregate</code> 。</li>
+<li><code>summer-stage2</code> 是将初次已经处理的数据在进行分组处理，最终处理完成的数据需要传递给后面的 <code>appregator</code>。</li>
+<li><code>sortval</code> 计算操作，计算 <code>1 - ValueSum</code>，作为排序的依据。输出添加 <code>SortVal</code>。</li>
+<li><code>sort</code> 根据 <code>SortVal</code> 对输入的流进行排序。</li>
+<li><code>final</code> 合并两个流，依据顺序输出。</li>
+</ul>
+<p><code>summer-stage2</code> 不一定需要与 <code>summer-stage1</code> 在同样的机器上执行，所以这个物理执行计划也有可能是如下形式的：</p>
+<p><img src="/uploads/distributed_sql_physical_plan_2.png" alt="physical plan_2"></p>
+<p>上面的每一个方块都叫一个 processor。</p>
+<h3 id="Processors"><a href="#Processors" class="headerlink" title="Processors"></a><strong>Processors</strong></h3><p><code>Processor</code> 中包含下面三个组成部分：<br><img src="/uploads/distributed_sql_processor.png" alt="processor"></p>
+<p>1.The input synchronizer 合并输入的流到一个单独的流中，分为三种情况</p>
+<ul>
+<li>单输入流，直接输出无需处理。</li>
+<li>无序多输入流，合并成一个就可以，无需考虑顺序。</li>
+<li>有序多输入流，要保证合成输出后一样是有序的流。</li>
+</ul>
+<p>2.Data processor 实现数据的转换和合并流程</p>
+<p>3.输出流分发到许多其它的 <code>processor</code> 作为输入流，由单个流变换成多个流。有如下几种情况：</p>
+<ul>
+<li>单输出流，直接转发即可。</li>
+<li>镜像模式，赋值所有值到所有输出流中。</li>
+<li><code>hash</code> 模式，每一列都只进入一个输出流，根据 <code>group key</code> 的 <code>hash</code> 值 确定到哪个输出值。</li>
+<li><code>range</code> 模式，根据后面要处理的数据的情况，根据 <code>range</code> 信息进行选择需要输出流。</li>
+</ul>
+<h2 id="Joins"><a href="#Joins" class="headerlink" title="Joins"></a><strong>Joins</strong></h2><hr>
+<h3 id="Join-by-lookup"><a href="#Join-by-lookup" class="headerlink" title="Join-by-lookup"></a><strong>Join-by-lookup</strong></h3><p>这种 Join-by-lookup 的方式是先获取到一个表的数据，然后通过这个表的数据再每行查询第二张表的数据。<br>举个例子：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">TABLE t (k INT PRIMARY KEY, u INT, v INT, INDEX(u))</span><br><span class="line">SELECT k, u, v FROM t WHERE u &gt;= 1 AND u &lt;= 5</span><br></pre></td></tr></table></figure></p>
+<p>逻辑模型就是：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">TABLE-READER indexsrc</span><br><span class="line">Table: t@u, span /1-/6</span><br><span class="line">Output schema: k:INT, u:INT</span><br><span class="line">Output ordering: u</span><br><span class="line"></span><br><span class="line">JOIN-READER pksrc</span><br><span class="line">Table: t</span><br><span class="line">Input schema: k:INT, u:INT</span><br><span class="line">Output schema: k:INT, u:INT, v:INT</span><br><span class="line">Ordering characterization: preserves any ordering on k/u</span><br><span class="line"></span><br><span class="line">AGGREGATOR final</span><br><span class="line">Input schema: k:INT, u:INT, v:INT</span><br><span class="line"></span><br><span class="line">indexsrc -&gt; pksrc -&gt; final</span><br></pre></td></tr></table></figure></p>
+<p>用作 Join 的时候，例子：</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">TABLE t1 (k INT PRIMARY KEY, v INT, INDEX(v))</span><br><span class="line">TABLE t2 (k INT PRIMARY KEY, w INT)</span><br><span class="line"><span class="keyword">SELECT</span> t1.k, t1.v, t2.w <span class="keyword">FROM</span> t1 <span class="keyword">INNER</span> <span class="keyword">JOIN</span> t2 <span class="keyword">ON</span> t1.k = t2.k <span class="keyword">WHERE</span> t1.v &gt;= <span class="number">1</span> <span class="keyword">AND</span> t1.v &lt;= <span class="number">5</span></span><br></pre></td></tr></table></figure>
+<p>逻辑模型就是：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">TABLE-READER t1src</span><br><span class="line">Table: t1@v, span /1-/6</span><br><span class="line">Output schema: k:INT, v:INT</span><br><span class="line">Output ordering: v</span><br><span class="line"></span><br><span class="line">JOIN-READER t2src</span><br><span class="line">Table: t2</span><br><span class="line">Input schema: k:INT, v:INT</span><br><span class="line">Output schema: k:INT, v:INT, w:INT</span><br><span class="line">Ordering characterization: preserves any ordering on k</span><br><span class="line"></span><br><span class="line">AGGREGATOR final</span><br><span class="line">Input schema: k:INT, u:INT, v:INT</span><br><span class="line"></span><br><span class="line">t1src -&gt; t2src -&gt; final</span><br></pre></td></tr></table></figure>
+<h3 id="Stream-joins"><a href="#Stream-joins" class="headerlink" title="Stream joins"></a><strong>Stream joins</strong></h3><p>这种 <code>aggregator</code>，会基于两个逻辑上的输入流进行 Join，需要有特定列的等值的条件。这种 aggregator 会 group on 那些相等的列，例如：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line">TABLE People (First STRING, Last STRING, Age INT)</span><br><span class="line">TABLE Applications (College STRING PRIMARY KEY, First STRING, Last STRING)</span><br><span class="line">SELECT College, Last, First, Age FROM People INNER JOIN Applications ON First, Last</span><br><span class="line"></span><br><span class="line">TABLE-READER src1</span><br><span class="line">Table: People</span><br><span class="line">Output Schema: First:STRING, Last:STRING, Age:INT</span><br><span class="line">Output Ordering: none</span><br><span class="line"></span><br><span class="line">TABLE_READER src2</span><br><span class="line">Table: Applications</span><br><span class="line">Output Schema: College:STRING, First:STRING, Last:STRING</span><br><span class="line">Output Ordering: none</span><br><span class="line"></span><br><span class="line">JOIN AGGREGATOR join</span><br><span class="line">Input schemas:</span><br><span class="line">  1: First:STRING, Last:STRING, Age:INT</span><br><span class="line">  2: College:STRING, First:STRING, Last:STRING</span><br><span class="line">Output schema: First:STRING, Last:STRING, Age:INT, College:STRING</span><br><span class="line">Group key: (1.First, 1.Last) = (2.First, 2.Last)  // we need to get the group key from either stream</span><br><span class="line">Order characterization: no order preserved  // could also preserve the order of one of the streams</span><br><span class="line"></span><br><span class="line">AGGREGATOR final</span><br><span class="line">  Ordering requirement: none</span><br><span class="line">  Input schema: First:STRING, Last:STRING, Age:INT, College:STRING</span><br></pre></td></tr></table></figure>
+<p><img src="/uploads/distributed_sql_join_logical.png" alt="join_logical"></p>
+<p>在 <code>stream join</code> 的物理执行计划的核心部分，就是 <code>Join processor</code>。<code>Join processor</code> 会将一个 <code>stream</code> 中的所有行放置到一个<code>hash map</code> 中，然后再获取另一个 <code>stream</code> 中的数据。如果两个 <code>stream</code> 都是在 <code>group key</code> 上有序的话，那么就可以执行 <code>merge join</code> 从而减少内存开销。</p>
+<p>应用同样的 join processor 的实现方式，我们可以有不同的分布式策略来具体执行，举个例子：</p>
+<ul>
+<li><p>第一种方式就是，路由方式可以是基于 hash 的方式，根据 group key 的 hash 值可以将 input streams 的 rows 进行分割，进入不同的实例中进行计算。如下所示：<br><img src="/uploads/distributed_sql_join_physical.png" alt="join_physical"></p>
+</li>
+<li><p>第二种方式就是，路由方式可以是基于镜像(mirror)的方式, 将一个较小的表中的所有的数据分别向大表所在的位置迁移。然后大表的数据在自己的 range 所在的 instance 中分别与这个小表进行计算。小表，大表是指在 <code>stream</code> 中的数据量，并不是指表的原始大小。 这种情况对于某些自查询比较有用处，比如： <code>SELECT ... WHERE ... AND x IN (SELECT ...)</code>。<br>依旧是上面的逻辑计划，如果 src2 的输出流包含的行数比较少，那么可以得出下面的物理执行计划：<br><img src="/uploads/distributed_sql_join_physical2.png" alt="join_physical2"></p>
+</li>
+</ul>
+<h3 id="Inter-stream-ordering"><a href="#Inter-stream-ordering" class="headerlink" title="Inter-stream ordering"></a><strong>Inter-stream ordering</strong></h3><hr>
+<p><strong>本功能是关于一个特定的优化的实现，但是不会修改逻辑模型和物理计划方面的东西。在最初的实现中，这个功能应该不会被实现，但是我们需要记得有这么个事情。</strong></p>
+<p>考虑一个情况如下：<br><figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">TABLE t (k INT PRIMARY KEY, v INT)</span><br><span class="line"><span class="keyword">SELECT</span> k, v <span class="keyword">FROM</span> t <span class="keyword">WHERE</span> k + v &gt; <span class="number">10</span> <span class="keyword">ORDER</span> <span class="keyword">BY</span> k</span><br></pre></td></tr></table></figure></p>
+<p>对应的简单的逻辑模型如下：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">READER src</span><br><span class="line">  Table: t</span><br><span class="line">  Output filter: (k + v &gt; 10)</span><br><span class="line">  Output schema: k:INT, v:INT</span><br><span class="line">  Ordering guarantee: k</span><br><span class="line"></span><br><span class="line">AGGREGATOR final:</span><br><span class="line">  Input schema: k:INT, v:INT</span><br><span class="line">  Input ordering requirement: k</span><br><span class="line">  Group Key: []</span><br><span class="line"></span><br><span class="line">Composition: src -&gt; final</span><br></pre></td></tr></table></figure>
+<p>假设，这个表需要两个<code>range</code>，这两个<code>rnage</code>在不同的<code>node</code>上，其中一个<code>range</code>的<code>key</code> 是  <code>k &lt;= 10</code>，另一个<code>range</code> 是 <code>k &gt; 10</code>。在物理计划中，我们就会有两个 <code>streams</code> 从两个 <code>reader</code> 上读取数据。这两份数据就会在 <code>final</code> 之前被<code>merge</code> 到一个 <code>stream</code> 中。这两个 <code>stream</code> 中的数据是有序的，我们可以叫这种情况为 <code>inter-stream ordering</code> 。<strong>这种情况下</strong> <code>merge</code> 的时候是不需要保持数据的有序的，可以直接从第一个读取以后，再次读取第二个 <code>stream</code> 内的信息就可以。<strong>更进一步来说</strong>，对于第二个 <code>stream</code> 的读取操作不需要开始，直到第一个 <code>stream</code> 的所有 <code>row</code> 都被获取完成。这种情况对于 <code>order by</code> 加 <code>limit</code> 的情况是很有用处的。很有可能我们只需要读取一个 <code>range</code> 的信息就足够返回数据，从而简化了执行的流程。</p>
+<h2 id="更复杂的例子：Daily-Promotion"><a href="#更复杂的例子：Daily-Promotion" class="headerlink" title="更复杂的例子：Daily Promotion"></a><strong>更复杂的例子：Daily Promotion</strong></h2><p>来描绘一个更复杂的逻辑模型和物理计划的例子。语句的目的就是帮助做一个促销，目标的客户是过去一年花费在$1000以上的客户。然后将客户信息和最近的总订单数量存储在 <code>DailyPromotion</code> 中。</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><span class="line">TABLE DailyPromotion (</span><br><span class="line">  Email TEXT,</span><br><span class="line">  Name TEXT,</span><br><span class="line">  OrderCount INT</span><br><span class="line">)</span><br><span class="line"></span><br><span class="line">TABLE Customers (</span><br><span class="line">  CustomerID INT PRIMARY KEY,</span><br><span class="line">  Email TEXT,</span><br><span class="line">  Name TEXT</span><br><span class="line">)</span><br><span class="line"></span><br><span class="line">TABLE Orders (</span><br><span class="line">  CustomerID INT,</span><br><span class="line">  Date DATETIME,</span><br><span class="line">  Value INT,</span><br><span class="line"></span><br><span class="line">  PRIMARY KEY (CustomerID, Date),</span><br><span class="line">  INDEX date (Date)</span><br><span class="line">)</span><br><span class="line"></span><br><span class="line"><span class="keyword">INSERT</span> <span class="keyword">INTO</span> DailyPromotion</span><br><span class="line">(<span class="keyword">SELECT</span> c.Email, c.Name, os.OrderCount <span class="keyword">FROM</span></span><br><span class="line">      Customers <span class="keyword">AS</span> c</span><br><span class="line">    <span class="keyword">INNER</span> <span class="keyword">JOIN</span></span><br><span class="line">      (<span class="keyword">SELECT</span> CustomerID, <span class="keyword">COUNT</span>(*) <span class="keyword">as</span> OrderCount <span class="keyword">FROM</span> Orders</span><br><span class="line">        <span class="keyword">WHERE</span> <span class="built_in">Date</span> &gt;= <span class="string">'2015-01-01'</span></span><br><span class="line">        <span class="keyword">GROUP</span> <span class="keyword">BY</span> CustomerID <span class="keyword">HAVING</span> <span class="keyword">SUM</span>(<span class="keyword">Value</span>) &gt;= <span class="number">1000</span>) <span class="keyword">AS</span> os</span><br><span class="line">    <span class="keyword">ON</span> c.CustomerID = os.CustomerID)</span><br></pre></td></tr></table></figure>
+<p>逻辑上的模型如下：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br></pre></td><td class="code"><pre><span class="line">TABLE-READER orders-by-date</span><br><span class="line">  Table: Orders@OrderByDate /2015-01-01 -</span><br><span class="line">  Input schema: Date: Datetime, OrderID: INT</span><br><span class="line">  Output schema: Cid:INT, Value:DECIMAL</span><br><span class="line">  Output filter: None (the filter has been turned into a scan range)</span><br><span class="line">  Intra-stream ordering characterization: Date</span><br><span class="line">  Inter-stream ordering characterization: Date</span><br><span class="line"></span><br><span class="line">JOIN-READER orders</span><br><span class="line">  Table: Orders</span><br><span class="line">  Input schema: Oid:INT, Date:DATETIME</span><br><span class="line">  Output filter: None</span><br><span class="line">  Output schema: Cid:INT, Date:DATETIME, Value:INT</span><br><span class="line">  // TODO: The ordering characterizations aren&apos;t necessary in this example</span><br><span class="line">  // and we might get better performance if we remove it and let the aggregator</span><br><span class="line">  // emit results out of order. Update after the  section on backpropagation of</span><br><span class="line">  // ordering requirements.</span><br><span class="line">  Intra-stream ordering characterization: same as input</span><br><span class="line">  Inter-stream ordering characterization: Oid</span><br><span class="line"></span><br><span class="line">AGGREGATOR count-and-sum</span><br><span class="line">  Input schema: CustomerID:INT, Value:INT</span><br><span class="line">  Aggregation: SUM(Value) as sumval:INT</span><br><span class="line">               COUNT(*) as OrderCount:INT</span><br><span class="line">  Group key: CustomerID</span><br><span class="line">  Output schema: CustomerID:INT, OrderCount:INT</span><br><span class="line">  Output filter: sumval &gt;= 1000</span><br><span class="line">  Intra-stream ordering characterization: None</span><br><span class="line">  Inter-stream ordering characterization: None</span><br><span class="line"></span><br><span class="line">JOIN-READER customers</span><br><span class="line">  Table: Customers</span><br><span class="line">  Input schema: CustomerID:INT, OrderCount: INT</span><br><span class="line">  Output schema: e-mail: TEXT, Name: TEXT, OrderCount: INT</span><br><span class="line">  Output filter: None</span><br><span class="line">  // TODO: The ordering characterizations aren&apos;t necessary in this example</span><br><span class="line">  // and we might get better performance if we remove it and let the aggregator</span><br><span class="line">  // emit results out of order. Update after the section on backpropagation of</span><br><span class="line">  // ordering requirements.</span><br><span class="line">  Intra-stream ordering characterization: same as input</span><br><span class="line">  Inter-stream ordering characterization: same as input</span><br><span class="line"></span><br><span class="line">INSERT inserter</span><br><span class="line">  Table: DailyPromotion</span><br><span class="line">  Input schema: email: TEXT, name: TEXT, OrderCount: INT</span><br><span class="line">  Table schema: email: TEXT, name: TEXT, OrderCount: INT</span><br><span class="line"></span><br><span class="line">INTENT-COLLECTOR intent-collector</span><br><span class="line">  Group key: []</span><br><span class="line">  Input schema: k: TEXT, v: TEXT</span><br><span class="line"></span><br><span class="line">AGGREGATOR final:</span><br><span class="line">  Input schema: rows-inserted:INT</span><br><span class="line">  Aggregation: SUM(rows-inserted) as rows-inserted:INT</span><br><span class="line">  Group Key: []</span><br><span class="line"></span><br><span class="line">Composition:</span><br><span class="line">order-by-date -&gt; orders -&gt; count-and-sum -&gt; customers -&gt; inserter -&gt; intent-collector</span><br><span class="line">                                                                  \-&gt; final (sum)</span><br></pre></td></tr></table></figure>
+<p>一个可能的物理模型如下：<br><img src="/uploads/distributed_sql_daily_promotion_physical_plan.png" alt="daily promotion"></p>
+
+      
+    </div>
+    
+    
+    
+
+    
+
+    
+
+    
+
+    <footer class="post-footer">
+      
+
+      
+      
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2017/12/14/CockroachDB_Logical_Plan/" rel="prev" title="CockroachDB 执行计划简单分析">
+                CockroachDB 执行计划简单分析 <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </div>
+  
+  
+  
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/uploads/avatar.jpg"
+               alt="Adam Yao" />
+          <p class="site-author-name" itemprop="name">Adam Yao</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives/">
+                <span class="site-state-item-count">2</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-categories">
+              <a href="/categories/index.html">
+                <span class="site-state-item-count">1</span>
+                <span class="site-state-item-name">分类</span>
+              </a>
+            </div>
+          
+
+          
+
+        </nav>
+
+        
+
+        <div class="links-of-author motion-element">
+          
+        </div>
+
+        
+        
+
+        
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#概述"><span class="nav-number">1.</span> <span class="nav-text"><a href="#&#x6982;&#x8FF0;" class="headerlink" title="&#x6982;&#x8FF0;"></a><strong>&#x6982;&#x8FF0;</strong></span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#概念"><span class="nav-number">1.1.</span> <span class="nav-text"><a href="#&#x6982;&#x5FF5;" class="headerlink" title="&#x6982;&#x5FF5;"></a><strong>&#x6982;&#x5FF5;</strong></span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#动机-需求分析"><span class="nav-number">2.</span> <span class="nav-text"><a href="#&#x52A8;&#x673A;-&#x9700;&#x6C42;&#x5206;&#x6790;" class="headerlink" title="&#x52A8;&#x673A;(&#x9700;&#x6C42;&#x5206;&#x6790;)"></a><strong>&#x52A8;&#x673A;(&#x9700;&#x6C42;&#x5206;&#x6790;)</strong></span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#设计"><span class="nav-number">3.</span> <span class="nav-text"><a href="#&#x8BBE;&#x8BA1;" class="headerlink" title="&#x8BBE;&#x8BA1;"></a><strong>&#x8BBE;&#x8BA1;</strong></span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#概述-1"><span class="nav-number">3.1.</span> <span class="nav-text"><a href="#&#x6982;&#x8FF0;-1" class="headerlink" title="&#x6982;&#x8FF0;"></a><strong>&#x6982;&#x8FF0;</strong></span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#逻辑模型"><span class="nav-number">3.2.</span> <span class="nav-text"><a href="#&#x903B;&#x8F91;&#x6A21;&#x578B;" class="headerlink" title="&#x903B;&#x8F91;&#x6A21;&#x578B;"></a><strong>&#x903B;&#x8F91;&#x6A21;&#x578B;</strong></span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Example-1"><span class="nav-number">3.3.</span> <span class="nav-text"><a href="#Example-1" class="headerlink" title="Example 1"></a><strong>Example 1</strong></span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Example-2"><span class="nav-number">3.4.</span> <span class="nav-text"><a href="#Example-2" class="headerlink" title="Example 2"></a><strong>Example 2</strong></span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Example-3"><span class="nav-number">3.5.</span> <span class="nav-text"><a href="#Example-3" class="headerlink" title="Example 3"></a><strong>Example 3</strong></span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#从逻辑模型到物理模型"><span class="nav-number">4.</span> <span class="nav-text"><a href="#&#x4ECE;&#x903B;&#x8F91;&#x6A21;&#x578B;&#x5230;&#x7269;&#x7406;&#x6A21;&#x578B;" class="headerlink" title="&#x4ECE;&#x903B;&#x8F91;&#x6A21;&#x578B;&#x5230;&#x7269;&#x7406;&#x6A21;&#x578B;"></a><strong>&#x4ECE;&#x903B;&#x8F91;&#x6A21;&#x578B;&#x5230;&#x7269;&#x7406;&#x6A21;&#x578B;</strong></span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Processors"><span class="nav-number">4.1.</span> <span class="nav-text"><a href="#Processors" class="headerlink" title="Processors"></a><strong>Processors</strong></span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Joins"><span class="nav-number">5.</span> <span class="nav-text"><a href="#Joins" class="headerlink" title="Joins"></a><strong>Joins</strong></span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Join-by-lookup"><span class="nav-number">5.1.</span> <span class="nav-text"><a href="#Join-by-lookup" class="headerlink" title="Join-by-lookup"></a><strong>Join-by-lookup</strong></span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Stream-joins"><span class="nav-number">5.2.</span> <span class="nav-text"><a href="#Stream-joins" class="headerlink" title="Stream joins"></a><strong>Stream joins</strong></span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Inter-stream-ordering"><span class="nav-number">5.3.</span> <span class="nav-text"><a href="#Inter-stream-ordering" class="headerlink" title="Inter-stream ordering"></a><strong>Inter-stream ordering</strong></span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#更复杂的例子：Daily-Promotion"><span class="nav-number">6.</span> <span class="nav-text"><a href="#&#x66F4;&#x590D;&#x6742;&#x7684;&#x4F8B;&#x5B50;&#xFF1A;Daily-Promotion" class="headerlink" title="&#x66F4;&#x590D;&#x6742;&#x7684;&#x4F8B;&#x5B50;&#xFF1A;Daily Promotion"></a><strong>&#x66F4;&#x590D;&#x6742;&#x7684;&#x4F8B;&#x5B50;&#xFF1A;Daily Promotion</strong></span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright" >
+  
+  &copy; 
+  <span itemprop="copyrightYear">2017</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Adam Yao</span>
+</div>
+
+
+
+        
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.2"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.2"></script>
+
+
+
+  
+  
+
+
+  <script type="text/javascript" src="/js/src/affix.js?v=5.1.2"></script>
+
+  <script type="text/javascript" src="/js/src/schemes/pisces.js?v=5.1.2"></script>
+
+
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.2"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.2"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.2"></script>
+
+
+
+  
+
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>
