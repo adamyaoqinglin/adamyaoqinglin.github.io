@@ -94,23 +94,19 @@
 
 
 
-<meta name="description" content="代码位置pkg/sql/plan.go 中的 makePlan 层次结构解析makePlan 主要是生成执行计划的作用。执行计划分为两个步骤：  newPlan 生成一个原始执行计划 optimizePlan 优化执行计划，生成最终执行计划  newPlan 会根据语句的类型生成对应的planNode。后续的说明会根据 selectCluase 解释说明。下图就是组成makePlan的代码部分。">
+<meta name="description" content="Context 包含 Deadlines,  cancelation signals, 和 other request-scoped values 贯穿不同的API和go线程. Context 一般会组织成一个树形结构，每一个Context的实现对应一个线程或者多个线程。Context 树可能的形式如下：  ###定义 123456type Context interface &amp;#123;">
 <meta property="og:type" content="article">
-<meta property="og:title" content="CockroachDB 执行计划简单分析">
-<meta property="og:url" content="https://adamyaoqinglin.github.io/2017/12/14/CockroachDB_Logical_Plan/index.html">
+<meta property="og:title" content="Go 语言中的 Context">
+<meta property="og:url" content="https://adamyaoqinglin.github.io/2017/12/14/Golang_context/index.html">
 <meta property="og:site_name" content="橡树">
-<meta property="og:description" content="代码位置pkg/sql/plan.go 中的 makePlan 层次结构解析makePlan 主要是生成执行计划的作用。执行计划分为两个步骤：  newPlan 生成一个原始执行计划 optimizePlan 优化执行计划，生成最终执行计划  newPlan 会根据语句的类型生成对应的planNode。后续的说明会根据 selectCluase 解释说明。下图就是组成makePlan的代码部分。">
+<meta property="og:description" content="Context 包含 Deadlines,  cancelation signals, 和 other request-scoped values 贯穿不同的API和go线程. Context 一般会组织成一个树形结构，每一个Context的实现对应一个线程或者多个线程。Context 树可能的形式如下：  ###定义 123456type Context interface &amp;#123;">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:image" content="https://adamyaoqinglin.github.io/uploads/makePlan.png">
-<meta property="og:image" content="https://adamyaoqinglin.github.io/uploads/newPlan.png">
-<meta property="og:image" content="https://adamyaoqinglin.github.io/uploads/planNode1.png">
-<meta property="og:image" content="https://adamyaoqinglin.github.io/uploads/render_filter.png">
-<meta property="og:image" content="https://adamyaoqinglin.github.io/uploads/scan_filter.png">
-<meta property="og:updated_time" content="2017-12-14T09:21:59.690Z">
+<meta property="og:image" content="https://adamyaoqinglin.github.io/uploads/contextStruct.png">
+<meta property="og:updated_time" content="2017-12-14T11:16:36.402Z">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="CockroachDB 执行计划简单分析">
-<meta name="twitter:description" content="代码位置pkg/sql/plan.go 中的 makePlan 层次结构解析makePlan 主要是生成执行计划的作用。执行计划分为两个步骤：  newPlan 生成一个原始执行计划 optimizePlan 优化执行计划，生成最终执行计划  newPlan 会根据语句的类型生成对应的planNode。后续的说明会根据 selectCluase 解释说明。下图就是组成makePlan的代码部分。">
-<meta name="twitter:image" content="https://adamyaoqinglin.github.io/uploads/makePlan.png">
+<meta name="twitter:title" content="Go 语言中的 Context">
+<meta name="twitter:description" content="Context 包含 Deadlines,  cancelation signals, 和 other request-scoped values 贯穿不同的API和go线程. Context 一般会组织成一个树形结构，每一个Context的实现对应一个线程或者多个线程。Context 树可能的形式如下：  ###定义 123456type Context interface &amp;#123;">
+<meta name="twitter:image" content="https://adamyaoqinglin.github.io/uploads/contextStruct.png">
 
 
 
@@ -139,13 +135,13 @@
 
 
 
-  <link rel="canonical" href="https://adamyaoqinglin.github.io/2017/12/14/CockroachDB_Logical_Plan/"/>
+  <link rel="canonical" href="https://adamyaoqinglin.github.io/2017/12/14/Golang_context/"/>
 
 
 
 
 
-  <title>CockroachDB 执行计划简单分析 | 橡树</title>
+  <title>Go 语言中的 Context | 橡树</title>
   
 
 
@@ -288,7 +284,7 @@
   
   
   <div class="post-block">
-    <link itemprop="mainEntityOfPage" href="https://adamyaoqinglin.github.io/2017/12/14/CockroachDB_Logical_Plan/">
+    <link itemprop="mainEntityOfPage" href="https://adamyaoqinglin.github.io/2017/12/14/Golang_context/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
       <meta itemprop="name" content="Adam Yao">
@@ -305,7 +301,7 @@
 
         
         
-          <h1 class="post-title" itemprop="name headline">CockroachDB 执行计划简单分析</h1>
+          <h1 class="post-title" itemprop="name headline">Go 语言中的 Context</h1>
         
 
         <div class="post-meta">
@@ -317,7 +313,7 @@
               
                 <span class="post-meta-item-text">发表于</span>
               
-              <time title="创建于" itemprop="dateCreated datePublished" datetime="2017-12-14T17:09:35+08:00">
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2017-12-14T19:11:21+08:00">
                 2017-12-14
               </time>
             
@@ -340,8 +336,8 @@
               
               
                 <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/CockroachDB/" itemprop="url" rel="index">
-                    <span itemprop="name">CockroachDB</span>
+                  <a href="/categories/Go-语言/" itemprop="url" rel="index">
+                    <span itemprop="name">Go 语言</span>
                   </a>
                 </span>
 
@@ -382,39 +378,31 @@
       
 
       
-        <h3 id="代码位置"><a href="#代码位置" class="headerlink" title="代码位置"></a>代码位置</h3><p><code>pkg/sql/plan.go</code> 中的 <code>makePlan</code></p>
-<h3 id="层次结构解析"><a href="#层次结构解析" class="headerlink" title="层次结构解析"></a>层次结构解析</h3><p><code>makePlan</code> 主要是生成执行计划的作用。执行计划分为两个步骤：</p>
-<ol>
-<li>newPlan 生成一个原始执行计划</li>
-<li>optimizePlan 优化执行计划，生成最终执行计划</li>
-</ol>
-<p><code>newPlan</code> 会根据语句的类型生成对应的planNode。后续的说明会根据 <code>selectCluase</code> 解释说明。下图就是组成makePlan的代码部分。</p>
-<p><code>optimizePlan</code> 会在后续进行说明</p>
-<p><img src="/uploads/makePlan.png" alt="makePlan中的操作"></p>
-<h3 id="selectCluase内部的结构"><a href="#selectCluase内部的结构" class="headerlink" title="selectCluase内部的结构"></a>selectCluase内部的结构</h3><p>对应于<code>selectCluase</code>，包含select语句的所有模块的处理操作(将<code>AST</code>树转换成为执行计划树)。举例来说明：<br><figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">SELECT</span></span><br><span class="line"> l.id, r.name</span><br><span class="line"><span class="keyword">FROM</span></span><br><span class="line"> <span class="keyword">user</span> l <span class="keyword">INNER</span> <span class="keyword">JOIN</span> profile r <span class="keyword">on</span> l.id = r.user_id</span><br><span class="line"><span class="keyword">WHERE</span></span><br><span class="line"> r.location = <span class="string">"beijing"</span>;</span><br></pre></td></tr></table></figure></p>
-<p>initFrom : <code>FROM user l INNER JOIN profile r on l.id = r.user_id</code><br>initWhere : <code>where r.location = &quot;beijing&quot;</code><br>initTargets : <code>SELECT l.id, r.name</code><br>groupBy, window, orderBy, Distinct, Limit: NULL</p>
-<p><img src="/uploads/newPlan.png" alt="生成PlanNode的相关的操作"></p>
-<p>通过 <code>initFrom</code> , 生成的 <code>planNode</code> 如下图所示：</p>
+        <p><code>Context</code> 包含 <code>Deadlines</code>,  <code>cancelation signals</code>, 和 <code>other request-scoped values</code> 贯穿不同的API和go线程. <code>Context</code> 一般会组织成一个树形结构，每一个<code>Context</code>的实现对应一个线程或者多个线程。<code>Context</code> 树可能的形式如下：</p>
+<p><img src="/uploads/contextStruct.png" alt="context"></p>
+<p>###定义</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">type Context interface &#123;</span><br><span class="line">        Deadline() (deadline time.Time, ok bool)</span><br><span class="line">        Done() &lt;-chan struct&#123;&#125;</span><br><span class="line">        Err() error</span><br><span class="line">        Value(key interface&#123;&#125;) interface&#123;&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>其中 <code>Deadline</code> 就是需要确认什么时间结束这个<code>Context</code>。在结束这个<code>Context</code>的信号被捕获，会通过channel <code>Done()</code> 的值知道本个<code>Context</code>树已经退出。这时能够通过 <code>Err()</code> 的输出信息获知退出的原因。</p>
+<p><code>Value()</code>，可以通过一个<code>Key</code>获取到一个<code>Value</code>。此功能有点类似于一个会话的各种属性。在不同的函数中能够共用这个属性。</p>
+<p>###用法</p>
+<p>1.结束 <code>Context</code> 树，这里就要说到如何生成<code>Context</code>节点。</p>
+<p>最高层的<code>Context</code>就是用一个空的<code>Context</code>来替代的，也就是根<code>Context</code>是空的。生成方法如下：<br><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ctx := context.Background()</span><br></pre></td></tr></table></figure></p>
+<p>接下来生成根节点的子节点，这里可以选择集中方法：</p>
 <ul>
-<li>1  <code>renderNode</code> , 代表整体的select语句</li>
-<li>2  <code>renderNode</code> , 代表From内部的内容</li>
-<li>3  <code>joinNode</code> , 代表 <code>l join r</code></li>
-<li>4  <code>scan</code> , 代表一个表或者索引</li>
+<li><p>通过<code>cancel</code>函数来结束<code>Context</code>树</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">// calling cancel will stop the ctxA</span><br><span class="line">ctxA, cancel := context.WithCancel(ctx)</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>通过 <code>结束时间</code> 结束 <code>Context</code> 树</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">// deadline is New() + 50 millisecond</span><br><span class="line">d := time.Now().Add(50 * time.Millisecond)</span><br><span class="line">// either calling cancel or reaching the deadline will stop the ctxA</span><br><span class="line">ctxA, cancel := context.WithDeadline(ctx, d)</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>通过超时时间结束 <code>Context</code> 树</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">// either calling cancel or timeout will stop the ctxA</span><br><span class="line">ctxA, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)</span><br></pre></td></tr></table></figure>
+</li>
 </ul>
-<p><img src="/uploads/planNode1.png" alt="planNode 的结构"></p>
-<p>通过 <code>initWhere</code> , 重新修改 <code>planNode</code> ，生成的新的 <code>planNode</code> 如下：<br>1，2，3，4 代表的意思不变。</p>
-<ul>
-<li>5 <code>filterNode</code> ，代表 <code>where r.location = &quot;beijing&quot;</code><br><img src="/uploads/render_filter.png" alt="initWhere 后的planNode的结构"></li>
-</ul>
-<p>通过 <code>initTarget</code> , 重新修改 <code>planNode</code>  ，增加 <code>ResultColumns</code> 信息，不需画图，可自行看代码。</p>
-<h3 id="optimizePlan内部内容"><a href="#optimizePlan内部内容" class="headerlink" title="optimizePlan内部内容"></a>optimizePlan内部内容</h3><p>包含两个优化方向：</p>
-<ol>
-<li><code>triggerFilterPropagation</code> <code>filter</code> 部分的下推等操作</li>
-<li><code>expandPlan</code> <code>selection, sort optimization</code> 等操作</li>
-</ol>
-<p>上面的语句经过 <code>triggerFilterPropagation</code> 下推操作：</p>
-<p><img src="/uploads/scan_filter.png" alt="这里写图片描述"></p>
-<p>经过 <code>expandPlan</code> 省略，主要是通过 <code>sort</code> 的操作进行<code>index</code>的选取等。具体实例可以参考 <code>IndexMergeJoin</code> 。</p>
+<p>2.获取<code>Context</code>中的存储的共享值。</p>
+<p>这个共享值的方法生成 <code>Context</code> 树是没有停掉自己的 <code>Context</code> 方法。它可以通过上层的<code>Contex</code>的停止使得自己停止。<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">ctxA := context.WithValue(ctx, &quot;language&quot;, &quot;Go&quot;)</span><br><span class="line">// v is &quot;Go&quot;</span><br><span class="line">v := ctxA.Value(&quot;language&quot;)</span><br></pre></td></tr></table></figure></p>
+<p>文末，拷贝官网的例子有助于理解。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br></pre></td><td class="code"><pre><span class="line">package main</span><br><span class="line"></span><br><span class="line">import (</span><br><span class="line">	&quot;context&quot;</span><br><span class="line">	&quot;fmt&quot;</span><br><span class="line">)</span><br><span class="line"></span><br><span class="line">func main() &#123;</span><br><span class="line">	// gen generates integers in a separate goroutine and</span><br><span class="line">	// sends them to the returned channel.</span><br><span class="line">	// The callers of gen need to cancel the context once</span><br><span class="line">	// they are done consuming generated integers not to leak</span><br><span class="line">	// the internal goroutine started by gen.</span><br><span class="line">	gen := func(ctx context.Context) &lt;-chan int &#123;</span><br><span class="line">		dst := make(chan int)</span><br><span class="line">		n := 1</span><br><span class="line">		go func() &#123;</span><br><span class="line">			for &#123;</span><br><span class="line">				select &#123;</span><br><span class="line">				case &lt;-ctx.Done():</span><br><span class="line">					return // returning not to leak the goroutine</span><br><span class="line">				case dst &lt;- n:</span><br><span class="line">					n++</span><br><span class="line">					</span><br><span class="line">				&#125;</span><br><span class="line">			&#125;</span><br><span class="line">			</span><br><span class="line">		&#125;()</span><br><span class="line">		return dst</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	ctx, cancel := context.WithCancel(context.Background())</span><br><span class="line">	defer cancel() // cancel when we are finished consuming integers</span><br><span class="line"></span><br><span class="line">	for n := range gen(ctx) &#123;</span><br><span class="line">		fmt.Println(n)</span><br><span class="line">		if n == 5 &#123;</span><br><span class="line">			break</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
       
     </div>
@@ -468,8 +456,8 @@
         <div class="post-nav">
           <div class="post-nav-next post-nav-item">
             
-              <a href="/2017/12/14/CockroachDB_Physical_Plan/" rel="next" title="CockroachDB 物理执行计划简单分析">
-                <i class="fa fa-chevron-left"></i> CockroachDB 物理执行计划简单分析
+              <a href="/2017/12/14/CockroachDB_Logical_Plan/" rel="next" title="CockroachDB 执行计划简单分析">
+                <i class="fa fa-chevron-left"></i> CockroachDB 执行计划简单分析
               </a>
             
           </div>
@@ -478,8 +466,8 @@
 
           <div class="post-nav-prev post-nav-item">
             
-              <a href="/2017/12/14/Golang_context/" rel="prev" title="Go 语言中的 Context">
-                Go 语言中的 Context <i class="fa fa-chevron-right"></i>
+              <a href="/2017/12/14/CockroachDB_context/" rel="prev" title="CockroachDB 的 Context">
+                CockroachDB 的 Context <i class="fa fa-chevron-right"></i>
               </a>
             
           </div>
@@ -532,17 +520,8 @@
       
 
       
-        <ul class="sidebar-nav motion-element">
-          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
-            文章目录
-          </li>
-          <li class="sidebar-nav-overview" data-target="site-overview">
-            站点概览
-          </li>
-        </ul>
-      
 
-      <section class="site-overview sidebar-panel">
+      <section class="site-overview sidebar-panel sidebar-panel-active">
         <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
           <img class="site-author-image" itemprop="image"
                src="/uploads/avatar.jpg"
@@ -613,22 +592,6 @@
 
       </section>
 
-      
-      <!--noindex-->
-        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
-          <div class="post-toc">
-
-            
-              
-            
-
-            
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#代码位置"><span class="nav-number">1.</span> <span class="nav-text"><a href="#&#x4EE3;&#x7801;&#x4F4D;&#x7F6E;" class="headerlink" title="&#x4EE3;&#x7801;&#x4F4D;&#x7F6E;"></a>&#x4EE3;&#x7801;&#x4F4D;&#x7F6E;</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#层次结构解析"><span class="nav-number">2.</span> <span class="nav-text"><a href="#&#x5C42;&#x6B21;&#x7ED3;&#x6784;&#x89E3;&#x6790;" class="headerlink" title="&#x5C42;&#x6B21;&#x7ED3;&#x6784;&#x89E3;&#x6790;"></a>&#x5C42;&#x6B21;&#x7ED3;&#x6784;&#x89E3;&#x6790;</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#selectCluase内部的结构"><span class="nav-number">3.</span> <span class="nav-text"><a href="#selectCluase&#x5185;&#x90E8;&#x7684;&#x7ED3;&#x6784;" class="headerlink" title="selectCluase&#x5185;&#x90E8;&#x7684;&#x7ED3;&#x6784;"></a>selectCluase&#x5185;&#x90E8;&#x7684;&#x7ED3;&#x6784;</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#optimizePlan内部内容"><span class="nav-number">4.</span> <span class="nav-text"><a href="#optimizePlan&#x5185;&#x90E8;&#x5185;&#x5BB9;" class="headerlink" title="optimizePlan&#x5185;&#x90E8;&#x5185;&#x5BB9;"></a>optimizePlan&#x5185;&#x90E8;&#x5185;&#x5BB9;</span></a></li></ol></div>
-            
-
-          </div>
-        </section>
-      <!--/noindex-->
       
 
       
