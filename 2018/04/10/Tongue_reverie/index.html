@@ -94,21 +94,17 @@
 
 
 
-<meta name="description" content="之前的 四人帮 的书中，提到过很多的设计模式，但是实际在编写代码的过程中能够用到的却是很少的。在阅读 cockroachDB 源代码的时候，发现这个composite模式和Visitor模式混合使用，感觉代码简洁很多，这里就记录下这两个模式的用处。 ###回顾一下composite模式 简单来说，这个模式就是实现类的树形结构的模式。图片来自w3sDesign.com。 以 cockroachDB">
+<meta name="description" content="4月10日白日里遐想颇多想象着如果你联系我我当如何答对惩罚你上刀山下油锅惩罚你道歉千次惩罚你安慰我受伤的心灵这夜悄悄到来不时的看看手机生怕错过一条信息无梦的一夜睁开眼睛再看看手机与昨夜相差无几遐想延绵不绝生命滚滚不熄这就是修行">
 <meta property="og:type" content="article">
-<meta property="og:title" content="CockroachDB 中的 Visitor模式加composite模式">
-<meta property="og:url" content="https://adamyaoqinglin.github.io/2017/12/14/CockroachDB_visitor_composite/index.html">
+<meta property="og:title" content="遐想">
+<meta property="og:url" content="https://adamyaoqinglin.github.io/2018/04/10/Tongue_reverie/index.html">
 <meta property="og:site_name" content="橡树">
-<meta property="og:description" content="之前的 四人帮 的书中，提到过很多的设计模式，但是实际在编写代码的过程中能够用到的却是很少的。在阅读 cockroachDB 源代码的时候，发现这个composite模式和Visitor模式混合使用，感觉代码简洁很多，这里就记录下这两个模式的用处。 ###回顾一下composite模式 简单来说，这个模式就是实现类的树形结构的模式。图片来自w3sDesign.com。 以 cockroachDB">
+<meta property="og:description" content="4月10日白日里遐想颇多想象着如果你联系我我当如何答对惩罚你上刀山下油锅惩罚你道歉千次惩罚你安慰我受伤的心灵这夜悄悄到来不时的看看手机生怕错过一条信息无梦的一夜睁开眼睛再看看手机与昨夜相差无几遐想延绵不绝生命滚滚不熄这就是修行">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:image" content="https://adamyaoqinglin.github.io/uploads/composite.jpg">
-<meta property="og:image" content="https://adamyaoqinglin.github.io/uploads/ast_plus_plus.png">
-<meta property="og:image" content="https://adamyaoqinglin.github.io/uploads/visitor.jpg">
-<meta property="og:updated_time" content="2017-12-14T11:51:00.075Z">
+<meta property="og:updated_time" content="2018-04-10T05:16:12.546Z">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="CockroachDB 中的 Visitor模式加composite模式">
-<meta name="twitter:description" content="之前的 四人帮 的书中，提到过很多的设计模式，但是实际在编写代码的过程中能够用到的却是很少的。在阅读 cockroachDB 源代码的时候，发现这个composite模式和Visitor模式混合使用，感觉代码简洁很多，这里就记录下这两个模式的用处。 ###回顾一下composite模式 简单来说，这个模式就是实现类的树形结构的模式。图片来自w3sDesign.com。 以 cockroachDB">
-<meta name="twitter:image" content="https://adamyaoqinglin.github.io/uploads/composite.jpg">
+<meta name="twitter:title" content="遐想">
+<meta name="twitter:description" content="4月10日白日里遐想颇多想象着如果你联系我我当如何答对惩罚你上刀山下油锅惩罚你道歉千次惩罚你安慰我受伤的心灵这夜悄悄到来不时的看看手机生怕错过一条信息无梦的一夜睁开眼睛再看看手机与昨夜相差无几遐想延绵不绝生命滚滚不熄这就是修行">
 
 
 
@@ -137,13 +133,13 @@
 
 
 
-  <link rel="canonical" href="https://adamyaoqinglin.github.io/2017/12/14/CockroachDB_visitor_composite/"/>
+  <link rel="canonical" href="https://adamyaoqinglin.github.io/2018/04/10/Tongue_reverie/"/>
 
 
 
 
 
-  <title>CockroachDB 中的 Visitor模式加composite模式 | 橡树</title>
+  <title>遐想 | 橡树</title>
   
 
 
@@ -286,7 +282,7 @@
   
   
   <div class="post-block">
-    <link itemprop="mainEntityOfPage" href="https://adamyaoqinglin.github.io/2017/12/14/CockroachDB_visitor_composite/">
+    <link itemprop="mainEntityOfPage" href="https://adamyaoqinglin.github.io/2018/04/10/Tongue_reverie/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
       <meta itemprop="name" content="Adam Yao">
@@ -303,7 +299,7 @@
 
         
         
-          <h1 class="post-title" itemprop="name headline">CockroachDB 中的 Visitor模式加composite模式</h1>
+          <h1 class="post-title" itemprop="name headline">遐想</h1>
         
 
         <div class="post-meta">
@@ -315,8 +311,8 @@
               
                 <span class="post-meta-item-text">发表于</span>
               
-              <time title="创建于" itemprop="dateCreated datePublished" datetime="2017-12-14T19:46:41+08:00">
-                2017-12-14
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2018-04-10T10:40:52+08:00">
+                2018-04-10
               </time>
             
 
@@ -338,8 +334,8 @@
               
               
                 <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/CockroachDB/" itemprop="url" rel="index">
-                    <span itemprop="name">CockroachDB</span>
+                  <a href="/categories/随意想想/" itemprop="url" rel="index">
+                    <span itemprop="name">随意想想</span>
                   </a>
                 </span>
 
@@ -380,20 +376,7 @@
       
 
       
-        <p>之前的 <code>四人帮</code> 的书中，提到过很多的设计模式，但是实际在编写代码的过程中能够用到的却是很少的。在阅读 <code>cockroachDB</code> 源代码的时候，发现这个<code>composite</code>模式和<code>Visitor</code>模式混合使用，感觉代码简洁很多，这里就记录下这两个模式的用处。</p>
-<p>###回顾一下<code>composite</code>模式</p>
-<p>简单来说，这个模式就是实现类的树形结构的模式。图片来自w3sDesign.com。<br><img src="/uploads/composite.jpg" alt="composite类图"></p>
-<p>以 <code>cockroachDB</code> 源码的方式来举例：</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">3 + （4 + 5）</span><br></pre></td></tr></table></figure>
-<p>分析出 <code>AST</code> 树是：<br><img src="/uploads/ast_plus_plus.png" alt="AST树"></p>
-<p>存储这个<code>AST</code>树的结构应该定义成树形的结构。这里就可以应用<code>composite</code>模式。上面的<code>AST</code>树包含两种表达式，一种是<code>integer</code>类型的表达式，另一种是<code>add</code>类型的表达式。<br><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> Expr <span class="keyword">interface</span> &#123;</span><br><span class="line">  fmt.Stringer</span><br><span class="line">  NodeFormatter</span><br><span class="line">  Walk(Visitor) Expr</span><br><span class="line">  TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error)</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">type</span> ComparisonExpr <span class="keyword">struct</span> &#123;</span><br><span class="line">  Operator    ComparisonOperator</span><br><span class="line">  SubOperator ComparisonOperator</span><br><span class="line">  Left, Right Expr</span><br><span class="line">  typeAnnotation</span><br><span class="line">  fn CmpOp</span><br><span class="line">&#125;</span><br><span class="line"> <span class="keyword">type</span> NumVal <span class="keyword">struct</span> &#123;</span><br><span class="line">  constant.Value</span><br><span class="line">  OrigString <span class="keyword">string</span></span><br><span class="line">  resInt     DInt</span><br><span class="line">  resFloat   DFloat</span><br><span class="line">  resDecimal DDecimal</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
-<p>由上面的代码可以看出，<code>ComparisonExpr</code> 本身就是 <code>Expr</code> 的一个实现，而在 <code>ComparisonExpr</code> 内部，又包含两个 <code>Expr</code>，这就是<code>composite</code>模式。具体请参考<code>四人帮</code>书籍。</p>
-<p>###回顾一下Visitor模式</p>
-<p>简单来说就是对于一种接口，实现一类方法来统一访问这些类。类图如下：<br><img src="/uploads/visitor.jpg" alt="Visitor的类图"></p>
-<p>同样以<code>CockroachDB</code>中的代码作为例子来看。好处在于在后续的操作中，不需要对已经有的<code>Expr</code>代码进行修改就可以实现很多依赖它的操作。<br>需求 ：将一个 <code>Expr</code> 树中，能够以常量进行替换的替换，输出替换后的新的<code>Expr</code>。<br>实现：在<code>Expr</code>中包含一个<code>Walk</code>函数，可以认为就是上图中的<code>accept</code>函数。<code>constantFolderVisitor</code>就是<code>Visitor</code>的一个实现。</p>
-<p>需求：查找<code>Expr</code>中可以变换为同一张表的条件语句。例如，<code>t1.id = t2.id AND t1.id = 10</code> 这个就可以转换成 <code>t1.id = t2.id AND t1.id = 10 AND t2.id = 10</code>.<br>实现：varConvertVisitor.</p>
-<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><span class="line"> <span class="keyword">type</span> Expr <span class="keyword">interface</span> &#123;</span><br><span class="line">   fmt.Stringer</span><br><span class="line">   NodeFormatter</span><br><span class="line">   Walk(Visitor) Expr</span><br><span class="line">   TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error)</span><br><span class="line"> &#125;</span><br><span class="line"> <span class="keyword">type</span> Visitor <span class="keyword">interface</span> &#123;</span><br><span class="line">  VisitPre(expr Expr) (recurse <span class="keyword">bool</span>, newExpr Expr)</span><br><span class="line">  VisitPost(expr Expr) (newNode Expr)</span><br><span class="line"> &#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">type</span> constantFolderVisitor <span class="keyword">struct</span>&#123;&#125;</span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(constantFolderVisitor)</span> <span class="title">VisitPre</span><span class="params">(expr Expr)</span> <span class="params">(recurse <span class="keyword">bool</span>, newExpr Expr)</span></span> &#123;</span><br><span class="line">   <span class="keyword">return</span> <span class="literal">true</span>, expr</span><br><span class="line"> &#125;</span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(constantFolderVisitor)</span> <span class="title">VisitPost</span><span class="params">(expr Expr)</span> <span class="params">(retExpr Expr)</span></span> &#123;</span><br><span class="line"><span class="comment">// 将expr能够转换为常量的进行转换。</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"> <span class="keyword">type</span> varConvertVisitor <span class="keyword">struct</span> &#123;</span><br><span class="line">   justCheck   <span class="keyword">bool</span></span><br><span class="line">   checkFailed <span class="keyword">bool</span></span><br><span class="line">   conv        varConvertFunc</span><br><span class="line"> &#125;</span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(constantFolderVisitor)</span> <span class="title">VisitPre</span><span class="params">(expr Expr)</span> <span class="params">(recurse <span class="keyword">bool</span>, newExpr Expr)</span></span> &#123;</span><br><span class="line">   <span class="comment">// 转换逻辑</span></span><br><span class="line"> &#125;</span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(constantFolderVisitor)</span> <span class="title">VisitPost</span><span class="params">(expr Expr)</span> <span class="params">(retExpr Expr)</span></span> &#123;</span><br><span class="line">   <span class="keyword">return</span> expr;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>通过上面两个例子，能够看出，这两个模式的叠加使用，方便的很。</p>
+        <h1 id="4月10日"><a href="#4月10日" class="headerlink" title="4月10日"></a>4月10日</h1><p>白日里遐想颇多<br>想象着如果你联系我<br>我当如何答对<br>惩罚你上刀山下油锅<br>惩罚你道歉千次<br>惩罚你安慰我受伤的心灵<br>这夜悄悄到来<br>不时的看看手机<br>生怕错过一条信息<br>无梦的一夜<br>睁开眼睛再看看手机<br>与昨夜相差无几<br>遐想延绵不绝<br>生命滚滚不熄<br>这就是修行</p>
 
       
     </div>
@@ -447,8 +430,8 @@
         <div class="post-nav">
           <div class="post-nav-next post-nav-item">
             
-              <a href="/2017/12/14/CockroachDB_cobra/" rel="next" title="CockroachDB 的 Cobra">
-                <i class="fa fa-chevron-left"></i> CockroachDB 的 Cobra
+              <a href="/2018/04/09/Tongue_abscess/" rel="next" title="脓疮">
+                <i class="fa fa-chevron-left"></i> 脓疮
               </a>
             
           </div>
@@ -456,10 +439,6 @@
           <span class="post-nav-divider"></span>
 
           <div class="post-nav-prev post-nav-item">
-            
-              <a href="/2018/03/28/Tongue_jasmine/" rel="prev" title="茉莉花香">
-                茉莉花香 <i class="fa fa-chevron-right"></i>
-              </a>
             
           </div>
         </div>
@@ -511,8 +490,17 @@
       
 
       
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
 
-      <section class="site-overview sidebar-panel sidebar-panel-active">
+      <section class="site-overview sidebar-panel">
         <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
           <img class="site-author-image" itemprop="image"
                src="/uploads/avatar.jpg"
@@ -583,6 +571,22 @@
 
       </section>
 
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#4月10日"><span class="nav-number">1.</span> <span class="nav-text"><a href="#4&#x6708;10&#x65E5;" class="headerlink" title="4&#x6708;10&#x65E5;"></a>4&#x6708;10&#x65E5;</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
       
 
       
